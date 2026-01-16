@@ -1,0 +1,97 @@
+import mariadb
+import sys
+import os
+
+class MovieDatabaseManager:
+    """
+    Handles connections and operations for the MariaDB instance
+    defined in docker-compose.yaml.
+    """
+
+    def __init__(self):
+        # Configuration pulled from your mariadb.env context
+        # In a real app, use: from dotenv import load_dotenv; load_dotenv()
+        self.config = {
+            "host": "127.0.0.1",
+            "port": 3306,
+            "user": "myuser",
+            "password": "YOUR_STRONG_USER_PASSWORD_HERE",
+            "database": "mydb"
+        }
+        self.conn = None
+
+    def connect(self):
+        """Establish connection to the MariaDB server."""
+        try:
+            self.conn = mariadb.connect(**self.config)
+            self.conn.autocommit = False # Better for transaction control
+            print("Successfully connected to MariaDB")
+        except mariadb.Error as e:
+            print(f"Error connecting to MariaDB Platform: {e}")
+            sys.exit(1)
+
+    def setup_tables(self):
+        """Initialize the movies table if it doesn't exist."""
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS movies (
+                    id INT PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    release_date DATE,
+                    rating DECIMAL(3,1),
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            """)
+            self.conn.commit()
+        except mariadb.Error as e:
+            print(f"Error creating table: {e}")
+
+    def save_movie(self, movie_id, title, release_date, rating):
+        """
+        Inserts or updates a movie record.
+        Uses parameterized queries to prevent SQL Injection.
+        """
+        cursor = self.conn.cursor()
+        try:
+            # Note: release_date 'Unknown' from tmdb_search.py is handled as NULL
+            db_date = None if release_date == "Unknown" else release_date
+
+            cursor.execute(
+                "INSERT INTO movies (id, title, release_date, rating) "
+                "VALUES (?, ?, ?, ?) "
+                "ON DUPLICATE KEY UPDATE title=?, release_date=?, rating=?",
+                (movie_id, title, db_date, rating, title, db_date, rating)
+            )
+            self.conn.commit()
+            print(f"Saved: {title}")
+        except mariadb.Error as e:
+            print(f"Error saving movie {title}: {e}")
+            self.conn.rollback()
+
+    def get_top_rated(self, min_rating=8.0):
+        """Retrieves movies with a rating above the threshold."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT title, rating FROM movies WHERE rating >= ? ORDER BY rating DESC", (min_rating,))
+        return cursor.fetchall()
+
+    def close(self):
+        if self.conn:
+            self.conn.close()
+            print("Connection closed.")
+
+if __name__ == "__main__":
+    db = MovieDatabaseManager()
+    db.connect()
+    db.setup_tables()
+
+    # Example: Saving data similar to your tmdb_search.py results
+    db.save_movie(155, "The Dark Knight", "2008-07-16", 8.5)
+
+    # Query example
+    top_movies = db.get_top_rated(8.0)
+    print("\nTop Rated Movies in DB:")
+    for title, rating in top_movies:
+        print(f"- {title}: {rating}")
+
+    db.close()

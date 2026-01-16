@@ -1,0 +1,10 @@
+version: '3'
+services:
+  mycards-db:
+    image: "mariadb:latest"
+    ports:
+      - 3307:3306
+    env_file:
+      - mariadb.env
+    volumes:
+      - ~/DOCKER/MTGBOT/mtgbotdockerapp/mariadbdata:/var/lib/mysql
