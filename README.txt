@@ -7,3 +7,5 @@ CREATE AND RUN MARIADB
 	root
 	W00tW00tIAmR00t
 	once in create the db my-cards
+3 - install requirements.txt
+    python -m pip install -r requirements.txt
